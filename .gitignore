@@ -1,0 +1,14 @@
+# окружение и секреты: в репо только *.example
+inventory.json
+.env
+*.env
+!.env.example
+!dns/.env.example
+
+# то, что генерируется на серверах
+dns/config/
+dns/zones/
+
+__pycache__/
+*.pyc
+.venv/

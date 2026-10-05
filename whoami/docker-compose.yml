@@ -1,0 +1,12 @@
+# Тестовое приложение. Порт берётся из .env (его пишет deploy.ps1 из inventory.json).
+services:
+  whoami:
+    build: .
+    image: whoami:local
+    container_name: whoami
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      PORT: ${WHOAMI_PORT:-8001}
+      APP_TITLE: ${WHOAMI_TITLE:-WhoAmI}
+      TRUST_PROXY: "false"

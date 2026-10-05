@@ -1,0 +1,50 @@
+{
+  "_readme": "Скопируй в inventory.json (он в .gitignore) и впиши свои серверы. Секреты сюда не пиши: пароль админки лежит в .env",
+
+  "ssh_user": "deploy",
+  "zone": "example.local",
+
+  "paths": {
+    "dns": "~/coredns",
+    "whoami": "~/whoami"
+  },
+
+  "dns": {
+    "ttl": 10,
+    "interval": 3,
+    "timeout": 2,
+    "admin_port": 9053,
+    "admin_user": "admin",
+    "upstream": "/etc/resolv.conf",
+    "coredns_image": "coredns/coredns:1.12.0",
+    "python_image": "python:3.12-slim"
+  },
+
+  "whoami": {
+    "port": 8001
+  },
+
+  "servers": [
+    { "name": "srv1", "ip": "x.x.x.x", "dns": true, "whoami": true },
+    { "name": "srv2", "ip": "x.x.x.x", "dns": true, "whoami": true }
+  ],
+
+  "records": {
+    "app.example.local": {
+      "port": 8090,
+      "path": "/admin/",
+      "expect": "",
+      "servers": ["srv1", "srv2"],
+      "stop": "cd /opt/app && docker compose stop",
+      "start": "cd /opt/app && docker compose start"
+    },
+    "whoami.example.local": {
+      "port": 8001,
+      "path": "/health",
+      "expect": "\"status\":\"ok\"",
+      "servers": ["srv1", "srv2"],
+      "stop": "docker stop whoami",
+      "start": "docker start whoami"
+    }
+  }
+}

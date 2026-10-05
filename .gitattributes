@@ -1,0 +1,4 @@
+# Всё уезжает на Linux-ноды: только LF, иначе CoreDNS/sed/env получат \r
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary

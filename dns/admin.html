@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DNS-админка</title>
+<style>
+  :root {
+    --bg: #f5f7fa; --card: #ffffff; --line: #e4e7eb; --text: #1f2933; --muted: #6b7785;
+    --accent: #2563eb; --ok: #15803d; --ok-bg: #dcfce7; --bad: #b91c1c; --bad-bg: #fee2e2;
+    --warn: #a16207; --warn-bg: #fef9c3; --off: #475569; --off-bg: #e2e8f0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 120px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 16px; margin: 0; }
+  .muted { color: var(--muted); }
+  .mono { font-family: ui-monospace, Consolas, monospace; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; margin-bottom: 16px; }
+  .banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; display: none; }
+  .banner.err { display: block; background: var(--bad-bg); color: var(--bad); border: 1px solid #fca5a5; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+          padding: 16px 18px; margin-bottom: 16px; }
+  .rec-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 10px; }
+  .rec-head h2 { font-family: ui-monospace, Consolas, monospace; }
+  .answers { font-size: 13px; }
+  .fields { display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 8px 0 12px; }
+  label.f { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+  input[type=text], input[type=number] {
+    font: inherit; padding: 6px 8px; border: 1px solid #cbd2d9; border-radius: 7px; background: #fff; color: var(--text);
+  }
+  input[type=text]:focus, input[type=number]:focus { outline: 2px solid #bfdbfe; border-color: var(--accent); }
+  input.w-port { width: 90px; } input.w-path { width: 160px; } input.w-exp { width: 220px; }
+  input.w-ip { width: 140px; } input.w-label { width: 110px; } input.w-num { width: 80px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  td.err { color: var(--muted); font-size: 12px; max-width: 320px; word-break: break-word; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .pill.off { background: var(--off-bg); color: var(--off); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.new { background: #e0e7ff; color: #3730a3; }
+  button { font: inherit; border-radius: 7px; border: 1px solid #cbd2d9; background: #fff; color: var(--text);
+           padding: 6px 12px; cursor: pointer; }
+  button:hover { background: #f1f5f9; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #1d4ed8; }
+  button.danger { color: var(--bad); }
+  button.small { padding: 3px 9px; font-size: 12px; }
+  .switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .switch input { width: 16px; height: 16px; }
+  .addrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 16px; }
+  .savebar { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line);
+             box-shadow: 0 -4px 16px rgba(15, 23, 42, .06); padding: 12px 16px; display: none; }
+  .savebar.show { display: block; }
+  .savebar .in { max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .savebar .msg { flex: 1; min-width: 200px; }
+  .toast { position: fixed; right: 16px; top: 16px; max-width: 420px; padding: 12px 14px; border-radius: 10px;
+           background: #fff; border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(15, 23, 42, .12); display: none; }
+  .toast.show { display: block; }
+  .toast.ok { border-color: #86efac; } .toast.bad { border-color: #fca5a5; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  @media (max-width: 720px) {
+    th.hide-sm, td.hide-sm { display: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>DNS-админка</h1>
+    <span class="muted" id="node"></span>
+    <span class="muted" id="cycle"></span>
+    <span class="muted" id="sync"></span>
+  </header>
+  <div class="banner" id="cfgerr"></div>
+
+  <div id="records"></div>
+
+  <div class="card">
+    <h2>Добавить запись</h2>
+    <div class="addrow">
+      <input type="text" id="nr-name" class="w-path" placeholder="api">
+      <span class="mono" id="nr-suffix"></span>
+      <input type="number" id="nr-port" class="w-port" placeholder="порт">
+      <input type="text" id="nr-path" class="w-path" placeholder="/health">
+      <button id="nr-add">Добавить запись</button>
+    </div>
+    <div class="hint">Пустое имя означает саму зону. Ноды в запись добавляются уже в её карточке.</div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Общие настройки</h2>
+      <div class="fields">
+        <label class="f">TTL ответа, с<input type="number" class="w-num" id="g-ttl" min="1" max="3600"></label>
+        <label class="f">Интервал проверки, с<input type="number" class="w-num" id="g-interval" min="1" max="60" step="0.5"></label>
+        <label class="f">Таймаут запроса, с<input type="number" class="w-num" id="g-timeout" min="0.5" max="30" step="0.5"></label>
+      </div>
+      <div class="hint">Меньше TTL и интервал: быстрее переключение, но больше DNS-запросов и проверок.</div>
+    </div>
+    <div class="card">
+      <h2>DNS-серверы (NS)</h2>
+      <table><tbody id="ns"></tbody></table>
+      <div class="addrow">
+        <input type="text" id="ns-name" class="w-label" placeholder="ns3">
+        <input type="text" id="ns-ip" class="w-ip" placeholder="192.168.1.x">
+        <button id="ns-add">Добавить</button>
+      </div>
+      <div class="addrow"><button id="resync">Разослать текущий конфиг на другие DNS</button></div>
+      <div class="hint">Сохранённый конфиг рассылается на все эти серверы сам. Кнопка нужна, если какой-то DNS лежал в момент сохранения. Новый NS сначала раскатай через deploy.ps1.</div>
+    </div>
+  </div>
+</main>
+
+<div class="savebar" id="savebar">
+  <div class="in">
+    <span class="msg" id="savemsg">Есть несохранённые изменения</span>
+    <button id="cancel">Отменить</button>
+    <button class="primary" id="save">Сохранить и применить</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+let state = null;        // последний ответ /api/state
+let draft = null;        // редактируемая копия конфига
+let dirty = false;
+let serverCfg = "";      // JSON конфига с сервера, чтобы заметить чужие изменения
+
+const $ = (id) => document.getElementById(id);
+const clone = (o) => JSON.parse(JSON.stringify(o));
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "checked") el.checked = v;
+    else if (v !== null && v !== undefined) el.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) {
+    if (kid === null || kid === undefined) continue;
+    el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  return el;
+}
+
+function ago(ts) {
+  if (!ts || !state) return "никогда";
+  const s = Math.max(0, Math.round(state.now - ts));
+  return s < 60 ? `${s} с назад` : `${Math.round(s / 60)} мин назад`;
+}
+
+function markDirty() {
+  dirty = true;
+  $("savebar").classList.add("show");
+  $("savemsg").textContent = "Есть несохранённые изменения";
+}
+
+function toast(text, ok) {
+  const t = $("toast");
+  t.textContent = text;
+  t.className = "toast show " + (ok ? "ok" : "bad");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => (t.className = "toast"), ok ? 5000 : 9000);
+}
+
+// ---------------------------------------------------------------- редактор
+
+function buildRecords() {
+  const box = $("records");
+  box.replaceChildren();
+  $("nr-suffix").textContent = "." + draft.zone;
+  for (const [name, rec] of Object.entries(draft.records)) box.append(recordCard(name, rec));
+  if (!Object.keys(draft.records).length) box.append(h("div", { class: "card muted" }, "Записей нет"));
+}
+
+function recordCard(name, rec) {
+  const rows = rec.ips.map((item, idx) => {
+    const k = `${name}|${item.ip}`;
+    return h("tr", { "data-k": k },
+      h("td", {}, h("input", { type: "text", class: "w-label", value: draft.labels[item.ip] || "", placeholder: "подпись",
+        oninput: (e) => { const v = e.target.value.trim(); if (v) draft.labels[item.ip] = v; else delete draft.labels[item.ip]; markDirty(); } })),
+      h("td", { class: "mono" }, item.ip),
+      h("td", {}, h("span", { class: "pill new st" }, "не сохранено")),
+      h("td", { class: "mono code hide-sm" }, ""),
+      h("td", { class: "mono ms hide-sm" }, ""),
+      h("td", { class: "err hide-sm" }, ""),
+      h("td", {}, h("label", { class: "switch" },
+        h("input", { type: "checkbox", checked: item.enabled,
+          onchange: (e) => { item.enabled = e.target.checked; markDirty(); paintStatus(); } }),
+        "в DNS")),
+      h("td", {}, h("button", { class: "small danger", title: "убрать ноду из записи",
+        onclick: () => { rec.ips.splice(idx, 1); markDirty(); buildRecords(); paintStatus(); } }, "убрать")),
+    );
+  });
+
+  const ipIn = h("input", { type: "text", class: "w-ip", placeholder: "192.168.1.x" });
+  const lbIn = h("input", { type: "text", class: "w-label", placeholder: "подпись" });
+  const addIp = () => {
+    const ip = ipIn.value.trim();
+    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return toast("IP должен быть вида 192.168.1.10", false);
+    if (rec.ips.some((x) => x.ip === ip)) return toast(`${ip} уже есть в ${name}`, false);
+    rec.ips.push({ ip, enabled: true });
+    if (lbIn.value.trim()) draft.labels[ip] = lbIn.value.trim();
+    markDirty(); buildRecords(); paintStatus();
+  };
+
+  return h("div", { class: "card", "data-rec": name },
+    h("div", { class: "rec-head" },
+      h("h2", {}, name),
+      h("span", { class: "pill mode" }, ""),
+      h("span", { class: "answers muted" }, ""),
+      h("span", { style: "flex:1" }),
+      h("button", { class: "small danger", onclick: () => {
+        if (!confirm(`Удалить запись ${name}? Имя перестанет резолвиться.`)) return;
+        delete draft.records[name]; markDirty(); buildRecords(); paintStatus();
+      } }, "удалить запись")),
+    h("div", { class: "fields" },
+      h("label", { class: "f" }, "Порт",
+        h("input", { type: "number", class: "w-port", value: rec.port, min: 1, max: 65535,
+          oninput: (e) => { rec.port = e.target.value === "" ? "" : Number(e.target.value); markDirty(); } })),
+      h("label", { class: "f" }, "Путь проверки",
+        h("input", { type: "text", class: "w-path", value: rec.path,
+          oninput: (e) => { rec.path = e.target.value; markDirty(); } })),
+      h("label", { class: "f" }, "Expect (строка в ответе, можно пусто)",
+        h("input", { type: "text", class: "w-exp mono", value: rec.expect || "",
+          oninput: (e) => { rec.expect = e.target.value; markDirty(); } }))),
+    h("table", {},
+      h("thead", {}, h("tr", {},
+        h("th", {}, "Нода"), h("th", {}, "IP"), h("th", {}, "Статус"), h("th", { class: "hide-sm" }, "HTTP"),
+        h("th", { class: "hide-sm" }, "мс"), h("th", { class: "hide-sm" }, "Ошибка"), h("th", {}, "Включена"), h("th", {}, ""))),
+      h("tbody", {}, rows)),
+    h("div", { class: "addrow" }, ipIn, lbIn, h("button", { onclick: addIp }, "Добавить ноду")),
+  );
+}
+
+function buildGlobal() {
+  for (const k of ["ttl", "interval", "timeout"]) $("g-" + k).value = draft[k];
+  const tb = $("ns");
+  tb.replaceChildren();
+  for (const [name, ip] of Object.entries(draft.nameservers)) {
+    tb.append(h("tr", {},
+      h("td", { class: "mono" }, name),
+      h("td", { class: "mono" }, ip, state && ip === state.node ? h("span", { class: "muted" }, "  (эта нода)") : null),
+      h("td", {}, h("button", { class: "small danger", onclick: () => {
+        if (Object.keys(draft.nameservers).length < 2) return toast("Нужен хотя бы один DNS-сервер", false);
+        delete draft.nameservers[name]; markDirty(); buildGlobal();
+      } }, "убрать"))));
+  }
+}
+
+function buildAll() { buildRecords(); buildGlobal(); paintStatus(); }
+
+// ---------------------------------------------------------------- статусы
+
+function paintStatus() {
+  if (!state || !draft) return;
+  const checks = state.checks || {};
+  document.querySelectorAll("tr[data-k]").forEach((tr) => {
+    const k = tr.dataset.k;
+    const [name, ip] = k.split("|");
+    const rec = draft.records[name];
+    const item = rec && rec.ips.find((x) => x.ip === ip);
+    const c = checks[k];
+    const st = tr.querySelector(".st");
+    if (!c) { st.className = "pill new st"; st.textContent = "не сохранено"; }
+    else if (item && !item.enabled) { st.className = "pill off st"; st.textContent = c.ok ? "выключена (жива)" : "выключена"; }
+    else if (c.ok) { st.className = "pill ok st"; st.textContent = "живая"; }
+    else { st.className = "pill bad st"; st.textContent = "мёртвая"; }
+    tr.querySelector(".code").textContent = c && c.code ? c.code : "";
+    tr.querySelector(".ms").textContent = c && c.ms !== null ? c.ms : "";
+    tr.querySelector(".err").textContent = c && c.error ? c.error : "";
+  });
+  document.querySelectorAll("[data-rec]").forEach((card) => {
+    const name = card.dataset.rec;
+    const mode = (state.modes || {})[name];
+    const ans = (state.answers || {})[name];
+    const pill = card.querySelector(".mode");
+    const lab = (ip) => (draft.labels[ip] ? `${ip} (${draft.labels[ip]})` : ip);
+    if (!mode) { pill.className = "pill new mode"; pill.textContent = "новая"; card.querySelector(".answers").textContent = ""; return; }
+    pill.className = "pill mode " + (mode === "ok" ? "ok" : mode === "fail-open" ? "warn" : "bad");
+    pill.textContent = mode === "ok" ? "работает" : mode === "fail-open" ? "все лежат, fail-open" : "пусто";
+    card.querySelector(".answers").textContent = ans && ans.length ? "DNS отдаёт: " + ans.map(lab).join(", ") : "DNS не отдаёт ничего";
+  });
+  $("node").textContent = state.node ? `нода ${state.node}` : "";
+  $("cycle").textContent = `проверка ${ago(state.last_cycle)}, serial ${state.serial}`;
+  const ls = state.last_sync;
+  $("sync").textContent = ls ? "синхронизация " + ago(ls.at) + ": " +
+    (Object.entries(ls.peers).map(([ip, r]) => `${ip} ${r === "ok" ? "ok" : "ошибка"}`).join(", ") || "других DNS нет") : "";
+  const e = $("cfgerr");
+  if (state.config_error) { e.className = "banner err"; e.textContent = "Конфиг на диске битый, работаю по последнему рабочему: " + state.config_error; }
+  else e.className = "banner";
+}
+
+// ---------------------------------------------------------------- сеть
+
+async function poll() {
+  try {
+    const r = await fetch("api/state", { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    state = await r.json();
+    const cfgJson = JSON.stringify(state.config);
+    if (state.config && cfgJson !== serverCfg) {
+      const external = serverCfg !== "";
+      serverCfg = cfgJson;
+      if (!dirty) { draft = clone(state.config); buildAll(); if (external) toast("Конфиг обновился (с другой ноды или руками)", true); }
+      else $("savemsg").textContent = "Есть несохранённые изменения. Внимание: конфиг на сервере успел поменяться";
+    }
+    paintStatus();
+  } catch (err) {
+    $("cycle").textContent = "нет связи с админкой: " + err.message;
+  }
+}
+
+function readGlobals() {
+  draft.ttl = Number($("g-ttl").value);
+  draft.interval = Number($("g-interval").value);
+  draft.timeout = Number($("g-timeout").value);
+}
+
+async function save() {
+  readGlobals();
+  $("save").disabled = true;
+  try {
+    const r = await fetch("api/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { toast("Не сохранено: " + (data.error || "HTTP " + r.status), false); return; }
+    dirty = false;
+    serverCfg = "";
+    $("savebar").classList.remove("show");
+    const peers = Object.entries(data.peers || {});
+    const bad = peers.filter(([, v]) => v !== "ok");
+    toast("Сохранено и применено. " + (peers.length
+      ? "Синхронизация: " + peers.map(([ip, v]) => `${ip} ${v === "ok" ? "ok" : v}`).join("; ")
+      : "Других DNS-серверов нет."), bad.length === 0);
+    await poll();
+  } finally {
+    $("save").disabled = false;
+  }
+}
+
+$("save").onclick = save;
+$("cancel").onclick = () => { dirty = false; draft = clone(state.config); $("savebar").classList.remove("show"); buildAll(); };
+for (const k of ["ttl", "interval", "timeout"]) $("g-" + k).addEventListener("input", markDirty);
+
+$("nr-add").onclick = () => {
+  const sub = $("nr-name").value.trim().toLowerCase().replace(/\.$/, "");
+  const name = sub ? `${sub}.${draft.zone}` : draft.zone;
+  if (sub && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/.test(sub)) return toast("Имя: латиница, цифры, дефис", false);
+  if (draft.records[name]) return toast(`${name} уже есть`, false);
+  const port = Number($("nr-port").value);
+  if (!port) return toast("Укажи порт", false);
+  draft.records[name] = { port, path: $("nr-path").value.trim() || "/", expect: "", ips: [] };
+  $("nr-name").value = ""; $("nr-port").value = ""; $("nr-path").value = "";
+  markDirty(); buildRecords(); paintStatus();
+};
+
+$("ns-add").onclick = () => {
+  const name = $("ns-name").value.trim().toLowerCase();
+  const ip = $("ns-ip").value.trim();
+  if (!/^[a-z0-9-]+$/.test(name)) return toast("Имя NS: латиница, цифры, дефис", false);
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return toast("IP должен быть вида 192.168.1.10", false);
+  draft.nameservers[name] = ip;
+  $("ns-name").value = ""; $("ns-ip").value = "";
+  markDirty(); buildGlobal();
+};
+
+$("resync").onclick = async () => {
+  const r = await fetch("api/sync", { method: "POST" });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return toast("Не разослано: " + (data.error || "HTTP " + r.status), false);
+  const peers = Object.entries(data.peers || {});
+  toast(peers.length ? "Рассылка: " + peers.map(([ip, v]) => `${ip} ${v === "ok" ? "ok" : v}`).join("; ") : "Других DNS-серверов нет",
+        peers.every(([, v]) => v === "ok"));
+  poll();
+};
+
+window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+poll();
+setInterval(poll, 2000);
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# Все значения приходят из переменных окружения контейнера (их пишет deploy.ps1 в .env на сервере).
+# {$VAR} CoreDNS подставляет одним словом, поэтому DNS_UPSTREAM это одно значение:
+# IP одного резолвера или файл со списком (по умолчанию /etc/resolv.conf хоста).
+
+{$DNS_ZONE}:{$DNS_PORT} {
+    bind {$NODE_IP}
+    file /etc/coredns/zones/{$DNS_ZONE}.zone {
+        reload {$ZONE_RELOAD}
+    }
+    loadbalance round_robin
+    log
+    errors
+}
+
+.:{$DNS_PORT} {
+    bind {$NODE_IP}
+    forward . {$DNS_UPSTREAM}
+    cache 30
+    errors
+}

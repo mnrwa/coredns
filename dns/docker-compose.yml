@@ -1,0 +1,49 @@
+# Значения берутся из .env рядом с этим файлом (его пишет deploy.ps1, права 600).
+# Пример всех переменных: dns/.env.example
+
+services:
+  healthcheck:
+    image: ${PYTHON_IMAGE:-python:3.12-slim}
+    container_name: dns-healthcheck
+    restart: unless-stopped
+    network_mode: host
+    user: "${RUN_UID:-1000}:${RUN_GID:-1000}"
+    environment:
+      NODE_IP: ${NODE_IP:?NODE_IP не задан в .env}
+      DNS_ZONE: ${DNS_ZONE:?DNS_ZONE не задан в .env}
+      ADMIN_PORT: ${ADMIN_PORT:-9053}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD не задан в .env}
+      HC_CONFIG: /app/config/records.json
+      HC_ZONES_DIR: /zones
+      HC_ADMIN_HTML: /app/admin.html
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./healthcheck.py:/app/healthcheck.py:ro
+      - ./admin.html:/app/admin.html:ro
+      - ./config:/app/config        # records.json, его правит админка
+      - ./zones:/zones              # сюда пишется zone-файл для CoreDNS
+    command: ["python3", "/app/healthcheck.py"]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/zones/${DNS_ZONE}.zone"]
+      interval: 2s
+      retries: 15
+
+  coredns:
+    image: ${COREDNS_IMAGE:-coredns/coredns:1.12.0}
+    container_name: coredns
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      healthcheck:
+        condition: service_healthy
+    environment:
+      NODE_IP: ${NODE_IP:?NODE_IP не задан в .env}
+      DNS_ZONE: ${DNS_ZONE:?DNS_ZONE не задан в .env}
+      DNS_PORT: ${DNS_PORT:-53}
+      DNS_UPSTREAM: ${DNS_UPSTREAM:-/etc/resolv.conf}
+      ZONE_RELOAD: ${ZONE_RELOAD:-2s}
+    volumes:
+      - ./Corefile:/etc/coredns/Corefile:ro
+      - ./zones:/etc/coredns/zones:ro
+    command: ["-conf", "/etc/coredns/Corefile"]
